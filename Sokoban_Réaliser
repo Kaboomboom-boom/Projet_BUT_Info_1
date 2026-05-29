@@ -1,0 +1,610 @@
+#include <stdlib.h>
+#include <stdio.h>
+#include <termios.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <string.h>
+#include <stdbool.h>
+
+//déclaration des constantes
+
+const char REINITIALISE = 'r';  // Touche réinitialise
+const char ABANDON = 'x';  // Touche abandon
+const char HAUT = 'z';  // Touche haut
+const char GAUCHE = 'q';  // Touche gauche
+const char DROITE = 'd';  // Touche droite
+const char BAS = 's';  // Touche bas
+
+const char MUR = '#';  // # -> mur
+const char CAISSE = '$';  // $ -> caisse
+const char CIBLE = '.';  // . -> cible
+const char SOKOBAN = '@';  // @ -> Sokoban
+const char VIDE = ' ';  // ESPACE -> vide
+
+const char CIBLE_SOKOBAN = '+';  // + -> Sokoban sur cible
+const char CIBLE_CAISSE = '*';  // * -> Caisse sur cible
+
+const char OUI[4] = "oui";
+const char NON[4] = "non";
+
+
+#define TAILLE 12
+
+typedef struct{
+    int x;
+    int y;
+    char typeCible;
+
+}coordCible;
+
+typedef char t_plateau[TAILLE][TAILLE];
+typedef coordCible lst_cible[50];
+
+
+
+//Déclaration des procédures et fonctions dans l'ordre
+
+void chargerPartie(t_plateau plateau, char fichier[]);
+void enregistrerPartie(t_plateau plateau, char fichier[]);
+int kbhit();
+void affiche_entete(char niveau[], int nbDeplacement);
+void affiche_plateau(t_plateau plateau);
+
+void restart(t_plateau plateau, char niveau[], int nbDeplacement);
+void arret(t_plateau plateau, char fichier[], bool *partieFini, int nbDeplacement);
+void partie_gagnee(t_plateau plateau, bool *partieFini, lst_cible cibles, int nbCible);
+void ou_est_cible(t_plateau plateau, lst_cible cibles, int *nb_elements);
+void ou_est_sokoban(int *x, int *y, t_plateau plateau);
+
+void deplacer(t_plateau plateau, int x, int y, char touche, lst_cible cible, int nbCible, int *nbDeplacement);
+void deplacement_possible(t_plateau plateau, int x, int y, char touche, bool *possible);
+void deplacement_caisse_possible(t_plateau plateau, int x, int y, char touche, bool *possible);
+
+void deplacement_haut(t_plateau plateau, int x, int y, lst_cible cibles,int nbCible);
+void deplacement_bas(t_plateau plateau, int x, int y, lst_cible cibles,int nbCible);
+void deplacement_gauche(t_plateau plateau, int x, int y, lst_cible cibles,int nbCible);
+void deplacement_droite(t_plateau plateau, int x, int y, lst_cible cibles,int nbCible);
+
+void quoi_sur_cible(t_plateau plateau, lst_cible cibles, int nbCible);
+
+
+
+
+int main(){
+
+    //déclaration des variables
+
+    t_plateau plateau;
+
+    int x, y;
+    int nbDeplacement;
+    char niveau[12];
+    char touche;
+    bool partieFini;
+    lst_cible cibles;
+    int nbCible;
+
+    // saisie des données
+
+    partieFini = 0;
+    nbCible = 0;
+    nbDeplacement = 0;
+    
+
+    printf("Quel niveau voulez vous ?\n");
+    printf("écrire : niveau?.sok ,avec ? un nombre ent 1 et 6 inclus \n");
+    scanf("%s", niveau);
+
+    // traitement des données
+
+    chargerPartie(plateau, niveau);
+    ou_est_cible(plateau, cibles, &nbCible);
+
+    // affichage des résultats
+    affiche_entete(niveau, nbDeplacement);
+    affiche_plateau(plateau);
+
+    while(partieFini == 0){ // Tant que la partie n'est pas fini
+    
+        touche = '\0';
+        ou_est_sokoban(&x, &y, plateau);
+
+        
+        if(kbhit()){ // Si une touche à été touchés
+            touche = getchar(); // Le caractère de la touche va dans la variable touche
+
+            if(touche == REINITIALISE){
+                restart(plateau, niveau, nbDeplacement);
+
+            }else if(touche == ABANDON){
+                arret(plateau , niveau, &partieFini, nbDeplacement);
+
+            }else if(touche == HAUT || touche == BAS || touche == GAUCHE || touche == DROITE){
+
+
+                deplacer(plateau, x, y, touche, cibles, nbCible, &nbDeplacement);
+                system("clear");
+                affiche_entete(niveau, nbDeplacement);
+                affiche_plateau(plateau);
+            }
+
+            if(partieFini == 0){
+                partie_gagnee(plateau, &partieFini, cibles, nbCible);
+            }
+
+           
+        }     
+    }
+
+    printf("VOUS AVEZ GAGNE AVEC %d DE DEPLACEMENTS !!!!!!!!!!!!!!!!!\n", nbDeplacement);
+
+    
+   return EXIT_SUCCESS;
+}
+
+
+
+
+// Procédures et Fonctions
+
+
+//Charge la partie
+void chargerPartie(t_plateau plateau, char fichier[]){
+    FILE * f;
+    char finDeLigne;
+
+    f = fopen(fichier, "r");
+    if (f==NULL){
+        printf("ERREUR SUR FICHIER");
+        exit(EXIT_FAILURE);
+    } else {
+        for (int ligne=0 ; ligne<TAILLE ; ligne++){
+            for (int colonne=0 ; colonne<TAILLE ; colonne++){
+                fread(&plateau[ligne][colonne], sizeof(char), 1, f);
+            }
+            fread(&finDeLigne, sizeof(char), 1, f);
+        }
+        fclose(f);
+    }
+}
+
+
+
+//Enregistre la partie
+void enregistrerPartie(t_plateau plateau, char fichier[]){
+    FILE * f;
+    char finDeLigne='\n';
+
+    f = fopen(fichier, "w");
+    for (int ligne=0 ; ligne<TAILLE ; ligne++){
+        for (int colonne=0 ; colonne<TAILLE ; colonne++){
+            fwrite(&plateau[ligne][colonne], sizeof(char), 1, f);
+        }
+        fwrite(&finDeLigne, sizeof(char), 1, f);
+    }
+    fclose(f);
+}
+
+
+//Permet d'appuyer sur les touches
+
+int kbhit(){
+	// la fonction retourne :
+	// 1 si un caractere est present
+	// 0 si pas de caractere présent
+	int unCaractere=0;
+	struct termios oldt, newt;
+	int ch;
+	int oldf;
+
+	// mettre le terminal en mode non bloquant
+	tcgetattr(STDIN_FILENO, &oldt);
+	newt = oldt;
+	newt.c_lflag &= ~(ICANON | ECHO);
+	tcsetattr(STDIN_FILENO, TCSANOW, &newt);
+	oldf = fcntl(STDIN_FILENO, F_GETFL, 0);
+	fcntl(STDIN_FILENO, F_SETFL, oldf | O_NONBLOCK);
+ 
+	ch = getchar();
+
+	// restaurer le mode du terminal
+	tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+	fcntl(STDIN_FILENO, F_SETFL, oldf);
+ 
+	if(ch != EOF){
+		ungetc(ch, stdin);
+		unCaractere=1;
+	} 
+	return unCaractere;
+}
+
+
+
+//Affiche l'entête du jeu
+
+void affiche_entete(char niveau[], int nbDeplacement){ //Mettre en entrer le nombre de déplacements
+
+    system("clear");
+    printf("Niveau actuel : %s \n", niveau); 
+    printf("Appuyer sur Z pour aller en haut, Q à gauche, D à droite et S en bas.\n");
+    printf("X pour mettre fin à la partie, R pour réinitialiser le niveau \n");
+    printf("Déplacement effectués : %d \n", nbDeplacement); // Plus tard: mettre le nombre de déplacement actuels
+    printf("\n");
+}
+
+
+//Affiche la grille de jeu
+
+void affiche_plateau(t_plateau plateau){
+
+    int i, j;
+
+    for(i = 0; i < TAILLE; i++){
+        j = 0;
+        for(j = 0; j < TAILLE; j++){
+            printf("%c", plateau[i][j]);
+        }
+        printf("\n");
+    }
+
+}
+
+
+//Reinitialise la partie
+void restart(t_plateau plateau, char niveau[], int nbDeplacement){
+
+    char reset[4];
+
+
+    printf("Voulez vous réinitialiser le niveau ?\n");
+    printf(" Entrer 'oui' pour valider, 'non' pour refuser \n");
+    scanf("%s", reset);
+
+    while(strcmp(reset, OUI) != 0 && strcmp(reset, NON) != 0){
+    printf("Valeur entrée érronée, veuillez recommencer ! \n");
+    scanf("%s", reset);
+    }
+
+    if(strcmp(reset, OUI) == 0){
+        system("clear");
+        chargerPartie(plateau, niveau);
+        affiche_entete(niveau, nbDeplacement);
+        affiche_plateau(plateau);
+
+
+    }else if(strcmp(reset, NON) == 0){
+        system("clear");
+        printf("Vous n'avez pas réinitialiser le partie\n");
+        printf("\n");
+        affiche_plateau(plateau);
+    }
+
+}
+
+// Abandonne la partie et demande pour enregistrer
+void arret(t_plateau plateau, char niveau[], bool *partieFini, int nbDeplacement){
+
+    char reset[4], enregistre[4];
+
+    printf("Voulez vous abandonner la partie ? \n");
+    printf(" Entrer 'oui' pour valider, 'non' pour refuser \n");
+    scanf("%s", reset);
+
+    while(strcmp(reset, OUI) != 0 && strcmp(reset, NON) != 0){
+        printf("Valeur entrée érronée, veuillez recommencer ! \n");
+        scanf("%s", reset);
+    }
+
+    if(strcmp(reset, OUI) == 0){
+
+        printf("Voulez vous enregristrer la partie ? \n");
+        printf(" Entrer 'oui' pour valider, 'non' pour refuser \n");
+        scanf("%s", enregistre);
+
+        while(strcmp(enregistre, OUI) != 0 && strcmp(enregistre, NON) != 0){
+            printf("Valeur entrée érronée, veuillez recommencer ! \n");
+            scanf("%s", enregistre);
+        }
+
+        if(strcmp(enregistre, OUI) == 0){
+            enregistrerPartie(plateau, niveau);
+            
+        }
+        system("clear");
+        *partieFini = 1;
+
+
+    }else if(strcmp(reset, NON) == 0){
+        system("clear");
+        printf("Vous n'avez pas abandonné le partie\n");
+        printf("\n");
+        affiche_entete(niveau, nbDeplacement);
+        affiche_plateau(plateau);
+    }
+
+}
+
+//Regarde si la partie est gagné
+void partie_gagnee(t_plateau plateau, bool *partieFini, lst_cible cibles, int nbCible){
+
+    int i;
+
+    *partieFini = 1;
+
+    for(i = 0; i < nbCible; i++){
+        if(cibles[i].typeCible != CIBLE_CAISSE){
+            *partieFini = 0;
+
+        }
+    }
+}
+
+//Trouve les cibles
+void ou_est_cible(t_plateau plateau, lst_cible cibles, int *nbElements){
+
+    int i, j;
+    coordCible point;
+
+    for(i = 0; i < TAILLE; i ++){
+        for(j = 0; j < TAILLE; j++){
+            if((plateau[i][j] == CIBLE)){
+                point.x = i;
+                point.y = j;
+                point.typeCible = plateau[i][j];
+                cibles[*nbElements] = point;
+                *nbElements = *nbElements + 1;
+            }
+        }
+    }
+}
+
+
+
+//Trouve Sokoban
+
+void ou_est_sokoban(int *x, int *y, t_plateau plateau){
+    int i, j;
+
+    for(i = 0; i < TAILLE; i++){
+        for(j = 0; j < TAILLE; j++){
+            if(((int)plateau[i][j] == SOKOBAN)|| ((int)plateau[i][j] == CIBLE_SOKOBAN)){
+                    *x = i;
+                    *y = j;
+            }
+        }
+    }
+}
+
+//Se deplace
+void deplacer(t_plateau plateau, int x, int y, char touche, lst_cible cibles, int nbCible, int *nbDeplacement){
+
+    bool possible;
+
+    
+    deplacement_possible(plateau, x, y, touche, &possible);
+    if(possible == 1){
+        *nbDeplacement = *nbDeplacement + 1 ;
+
+        if(touche == HAUT){
+            deplacement_haut(plateau, x, y, cibles, nbCible);
+        }else if(touche == BAS){
+            deplacement_bas(plateau, x, y, cibles, nbCible);
+        }else if(touche == GAUCHE){
+            deplacement_gauche(plateau, x, y, cibles, nbCible);
+        }else{
+            deplacement_droite(plateau, x, y, cibles, nbCible);
+        }
+        
+        
+    }
+    quoi_sur_cible(plateau, cibles, nbCible);
+
+}
+
+
+//Regarde si le deplacement de Sokoban est possible
+void deplacement_possible(t_plateau plateau, int x, int y, char touche, bool *possible){
+
+    bool caissePossible;
+
+    if(touche == HAUT){
+        if(plateau[x - 1][y] == MUR){
+            *possible = 0;
+        }else if(plateau[x - 1][y] == CAISSE){
+            deplacement_caisse_possible(plateau, x - 1, y, touche, &caissePossible);
+            if(caissePossible){
+                *possible = 1;
+            }else{
+                *possible = 0;
+            }
+        }else if(plateau[x - 1][y] == VIDE || plateau[x - 1][y] == CIBLE){
+            *possible = 1;
+        }
+            
+    }else if(touche == BAS){
+        if(plateau[x + 1][y] == MUR){
+            *possible = 0;
+        }else if(plateau[x + 1][y] == CAISSE){
+            deplacement_caisse_possible(plateau, x + 1, y, touche, &caissePossible);
+            if(caissePossible){
+                *possible = 1;
+            }else{
+                *possible =0;
+            }
+        }else if(plateau[x + 1][y] == VIDE || plateau[x + 1][y] == CIBLE){
+            *possible = 1;
+        }
+
+    }else if(touche == GAUCHE){
+        if(plateau[x][y - 1] == MUR){
+            *possible = 0;
+        }else if(plateau[x][y - 1] == CAISSE){
+            deplacement_caisse_possible(plateau, x, y - 1, touche, &caissePossible);
+            if(caissePossible){
+                *possible = 1;
+            }else{
+                *possible =0;
+            }
+        }else if(plateau[x][y - 1] == VIDE || plateau[x][y - 1] == CIBLE){
+            *possible = 1;
+        }
+
+    }else if(touche == DROITE){
+        if(plateau[x][y + 1] == MUR){
+            *possible = 0;
+        }else if(plateau[x][y + 1] == CAISSE){
+            deplacement_caisse_possible(plateau, x, y + 1, touche, &caissePossible);
+            if(caissePossible){
+                *possible = 1;
+            }else{
+                *possible =0;
+            }
+        }else if(plateau[x][y + 1] == VIDE  || plateau[x][y + 1] == CIBLE){
+            *possible = 1;
+        }
+    }  
+}
+
+
+//Regarde si deplacer la caisse est possible
+void deplacement_caisse_possible(t_plateau plateau, int x, int y, char touche, bool *possible){
+
+    if(touche == HAUT){
+        if(x > 1){
+            if(plateau[x - 1][y] == MUR || plateau[x - 1][y] == CAISSE){
+                *possible = 0;
+            }else{
+                *possible = 1;
+            }
+        }else{
+            *possible = 0;
+        }
+    }else if(touche == BAS){
+        if(x < (TAILLE - 2)){
+            if(plateau[x + 1][y] == MUR || plateau[x + 1][y] == CAISSE){
+                *possible = 0;
+            }else{
+                *possible = 1;
+            }
+        }else{
+            *possible = 0;
+        }
+    }else if(touche == GAUCHE){
+        if(y > 1){
+            if(plateau[x][y - 1] == MUR || plateau[x][y - 1] == CAISSE){
+                *possible = 0;
+            }else{
+                *possible = 1;
+            }
+        }else{
+            *possible = 0;
+        }
+    }else if(touche == DROITE){
+        if(y <(TAILLE - 2)){
+            if(plateau[x][y + 1] == MUR || plateau[x][y + 1] == CAISSE){
+                *possible = 0;
+            }else{
+                *possible = 1;
+            }
+        }else{
+            *possible = 0;
+        }
+    }
+}
+
+
+//Se deplace en haut
+void deplacement_haut(t_plateau plateau, int x, int y, lst_cible cibles,int nbCible){
+
+    int i;
+
+    i = x - 1;
+
+    if(plateau[i][y] == VIDE || plateau[i][y] == CIBLE){
+        plateau[x][y] = VIDE;
+        plateau[i][y] = SOKOBAN;
+    }else if(plateau[i][y] == CAISSE){
+        plateau[x][y] = VIDE;
+        plateau[i][y] = SOKOBAN;
+        plateau[i - 1][y] = CAISSE;
+    }
+
+}
+
+
+//Se deplace en bas 
+void deplacement_bas(t_plateau plateau, int x, int y,lst_cible cibles,int nbCible){
+
+    int i;
+
+    i = x + 1;
+
+    if(plateau[i][y] != MUR && plateau[i][y] != CAISSE){
+        plateau[x][y] = VIDE;
+        plateau[i][y] = SOKOBAN;
+
+    }else if(plateau[i][y] == CAISSE){
+        plateau[x][y] = VIDE;
+        plateau[i][y] = SOKOBAN;
+        plateau[i + 1][y] = CAISSE;
+    }
+
+}
+
+
+//Se deplace à gauche
+void deplacement_gauche(t_plateau plateau, int x, int y, lst_cible cibles,int nbCible){
+
+    int j;
+
+    j = y - 1; 
+
+    
+    if(plateau[x][j] == VIDE || plateau[x][j] == CIBLE){
+
+        plateau[x][y] = VIDE;
+        plateau[x][j] = SOKOBAN;
+    }else if(plateau[x][j] == CAISSE){
+        plateau[x][y] = VIDE;
+        plateau[x][j] = SOKOBAN;
+        plateau[x][j - 1] = CAISSE;
+    }
+
+}
+
+//Se deplace à droite
+void deplacement_droite(t_plateau plateau, int x, int y, lst_cible cibles,int nbCible){
+
+    int j;
+
+    j = y + 1;
+
+
+    if(plateau[x][j] == VIDE || plateau[x][j] == CIBLE){
+
+        plateau[x][y] = VIDE;
+        plateau[x][j] = SOKOBAN;
+    }else if(plateau[x][j] == CAISSE){
+        plateau[x][y] = VIDE;
+        plateau[x][j] = SOKOBAN;
+        plateau[x][j + 1] = CAISSE;
+    }
+
+}
+
+void quoi_sur_cible(t_plateau plateau, lst_cible cibles, int nbCible){
+
+    int i;
+
+    for(i = 0; i < nbCible; i++){
+        if(plateau[cibles[i].x][cibles[i].y] == VIDE){
+            plateau[cibles[i].x][cibles[i].y] = CIBLE;
+
+        }else if(plateau[cibles[i].x][cibles[i].y] == SOKOBAN){
+            cibles[i].typeCible = CIBLE_SOKOBAN;
+
+        }else if(plateau[cibles[i].x][cibles[i].y] == CAISSE){
+            cibles[i].typeCible = CIBLE_CAISSE;
+        }
+    }
+}
