@@ -1,0 +1,157 @@
+
+-- //////////////////// CLASSES //////////////////// --
+
+VAR Client BASE RELATION {
+    id_client integer,
+    nom_cli character,
+    prenom_cli character,
+    adresse_cli1 character, 
+    adresse_cli2 character,
+    adresse_cli3 character,
+    code_postal_cli char(5),
+    ville_cli character,
+    telephone_cli character,
+    mail_cli character
+} KEY {id_client};
+
+
+
+VAR Compteur BASE RELATION {
+    pdl_prm char(14),
+    adresse1 character,
+    adresse2 character,
+    adresse3 character,
+    code_postal character,
+    ville character,
+    date_hiver_ete character,
+    date_ete_hiver character
+} KEY {pdl_prm};
+
+
+
+VAR Contrat BASE RELATION {
+    no_contrat character,
+    date_debut_contrat character
+} KEY {no_contrat};
+
+
+
+VAR Date BASE RELATION {
+    date character
+} KEY {date};
+
+
+
+VAR CrÃ©neau_quotidien BASE RELATION {
+    heure character
+} KEY {heure};
+
+
+
+VAR Formule_tarifaire BASE RELATION {
+    id_formule integer,
+    lib_formule character,
+    descriptif_formule character,
+    date_commercialisation character
+} KEY {id_formule};
+
+
+
+VAR Fournisseur BASE RELATION {
+    id_fournisseur char(5),
+    libelle_fournisseur character,
+    telephone_fournisseur character,
+    mail_fournisseur character
+} KEY {id_fournisseur};
+
+
+
+VAR Creneau BASE RELATION {
+    no_creneau_hebdo integer,
+    jour_hebdo character,
+    heure_debut character,
+    heure_fin character
+} KEY {no_creneau_hebdo};
+
+
+
+VAR Periode_conso BASE RELATION {
+    id_periode_conso character,
+    lib_periode_conso character
+} KEY {id_periode_conso};
+
+
+
+VAR Puissance BASE RELATION {
+    val_puissance integer
+} KEY {val_puissance};
+
+
+
+
+
+-- //////////////////// CLASSES ASSOCIATIONS //////////////////// --
+
+VAR Releve BASE RELATION {
+    conso_kwh rationnal,
+} KEY {conso_kwh};
+
+
+
+VAR Tarif_kWh BASE RELATION {
+    prix_kWh_ht rationnal,
+    prix_kWh_ttc rationnal
+} KEY {id_formule, val_puissance, id_periode_conso};
+
+
+
+VAR Tarif_abonnement BASE RELATION {
+    prix_abo_ht rationnal,
+    prix_abo_ttc rationnal
+} KEY {id_formule, val_puissance};
+
+
+
+
+
+-- //////////////////// ASSOCIATIONS //////////////////// --
+
+VAR posseder BASE RELATION {
+    id_client integer,
+    pdl_prm char(14)
+} KEY {id_client, pdl_prm};
+
+
+
+VAR souscrire BASE RELATION {
+    no_contrat character,
+    date character,
+    id_formule integer
+} KEY {no_contrat, date, id_formule};
+
+
+
+VAR proposer BASE RELATION {
+    id_fournisseur char(5),
+    id_formule integer
+} KEY {id_fournisseur, id_formule};
+
+
+
+VAR comprend BASE RELATION {
+    id_formule integer,
+    no_creneau_hebdo integer
+} KEY {id_formule, no_creneau_hebdo};
+
+
+
+VAR inclure BASE RELATION {
+    id_formule integer,
+    id_periode_conso character
+} KEY {id_formule, id_periode_conso};
+
+
+
+
+
+-- //////////////////// CONTRAINTES //////////////////// --  
