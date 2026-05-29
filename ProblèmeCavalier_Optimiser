@@ -1,0 +1,251 @@
+#----Bibliothèques-----#
+
+import random
+import os
+import time
+from termcolor import colored #<-- La bibliothèque n'est pas forcément installée, il faudra donc l'installer
+import copy
+
+
+#-----Classes-----#
+
+
+class Case:
+    def __init__(self, coord,echiquier):
+        """Une Case à des coordonnées (x, y), une liste de voisins, et une valeur"""
+        """La valeur représente le nombre de voisin qui peuvent être visités, innitialisée à 0"""
+        """Une case a un ordre de passage innitialisé à 0"""
+        self.echiquier =echiquier
+        self.coord = coord
+        self.lstVoisins = []
+        self.valeur = 0
+        self.ordre = 0
+
+    def __str__(self):
+        return str(self.valeur)
+    
+
+    def ajouterVoisins(self, long, larg):
+        """Ajoute les voisin d'une Case d'un échiquier de taille long*larg"""
+        x = self.coord[0]  #self.coord = (x, y); self.coord[0] = x
+        y = self.coord[1]
+
+        if x + 1 < long and y + 2 < larg: #Si le voisin n'est pas en dehors de l'échiquier
+            self.lstVoisins.append(self.echiquier[x + 1][y + 2])
+
+        if x + 1 < long and y - 2 >= 0:
+            self.lstVoisins.append(self.echiquier[x + 1][y - 2])
+
+        if x - 1 >= 0 and y - 2 >= 0:
+            self.lstVoisins.append(self.echiquier[x - 1][y - 2])
+    
+        if x - 1 >= 0 and y + 2 < larg:
+            self.lstVoisins.append(self.echiquier[x - 1][y + 2])
+
+        if x + 2 < long and y + 1 < larg:
+            self.lstVoisins.append(self.echiquier[x + 2][y + 1])
+
+        if x + 2 < long and y - 1 >= 0:
+            self.lstVoisins.append(self.echiquier[x + 2][y - 1])
+        
+        if x - 2 >= 0 and y + 1 < larg:
+            self.lstVoisins.append(self.echiquier[x - 2][y + 1])
+
+        if x - 2 >= 0 and y - 1 >= 0:
+            self.lstVoisins.append(self.echiquier[x - 2][y - 1])
+
+ 
+        self.valeur = len(self.lstVoisins)
+
+
+
+    def supprimeVoisin(self, voisin):
+        """Supprime un voisin précis dans la liste des voisin visitables"""
+        """On enlève 1 à valeur et met valeur à 0 si la liste est vidée"""
+        trouve = False
+        i = 0
+        while i < self.valeur and trouve != True:
+            case = self.lstVoisins[i]
+            if case == voisin:
+                trouve = True
+                self.valeur -= 1
+            else:
+                i += 1
+
+    def ajouteUNVoisin(self, voisin):
+        self.lstVoisins.append(voisin)
+
+
+class Echiquier:
+
+    def __init__(self, longueur, largeur):
+        """Un Echiquier a une longuer et une largeur données"""
+        """L'Echiquier représente l'échiquier, initialisée comme une liste vide"""
+        self.long = longueur
+        self.larg = largeur
+        self.echiquier = []
+
+    def creerEchiquier(self):
+        """Créer leechiquier comme une liste de longueur self.long contenant des listes de taille self.larg"""
+        """self.echiquier[i][j] est une Case de coordnnées (i,j)"""
+        for i in range(self.long):
+            self.echiquier.append([])
+            for j in range(self.larg):
+                self.echiquier[i].append(Case((i,j), self.echiquier))
+
+
+
+    def afficherEchiquier(self):
+        """Affiche chaque Case de l'Echiquier avec l'ordre"""
+        """Retourne si le tour est possible"""
+        possible = True
+        print("______" * self.long)
+        for i in range(self.long):
+            ligne = "|"
+            for j in range(self.larg):
+                n = self.echiquier[i][j].ordre
+                if n == 0:
+                    ligne = ligne + colored(f'{str(n):^5}', 'black', 'on_white') + "|"
+                    possible = False
+                elif n == 1 or n == self.larg * self.long:
+                    ligne = ligne + colored(f'{str(n):^5}', 'red') + "|"
+                else:
+                    ligne = ligne + colored(f'{str(n):^5}', 'blue') + "|"
+            print(ligne)
+        print("______" * self.long)
+        return possible
+
+
+
+
+
+
+
+
+    def ajouterTOUSVoisins(self):
+        """Ajoute tous les voisins des Cases"""
+        for i in range(self.long):
+            for j in range(self.larg):
+                self.echiquier[i][j].ajouterVoisins(self.long, self.larg)
+
+
+def triBulle(T):
+    N = len(T)
+    changement = True
+    while changement == True:
+        changement = False
+        for k in range(N-1):
+            if T[k].valeur > T[k+1].valeur:
+                T[k], T[k+1] = T[k+1], T[k]
+                changement = True
+        N = N-1
+
+    return T
+
+
+
+class problemeCavalier:
+
+    def __init__(self,echiquier):
+        """Le Problème du Cavalier a uneechiquier, une Case sur laquelle le cavalier est situer"""
+        """Et une pile de toutes les Cases visitées"""
+        """On ajoute tous les voisins dans l'Echiquier"""
+        """La case est initialisé avec une Case vide"""
+        """Puis on génère aléatoirement la première Case"""
+        """On insère la première Case dans la pile"""
+        self.echiquier = echiquier
+        self.echiquier.ajouterTOUSVoisins()
+        self.pile = []
+        self.case = Case((-1,-1), self.echiquier)
+        self.premiere = Case((-1,-1), self.echiquier)
+
+
+    def genererPremiereCase(self):
+        """Génère aléatoirement la première Case"""
+        i = random.randrange(0, self.echiquier.long)
+        j = random.randrange(0, self.echiquier.larg)
+        self.case = self.echiquier.echiquier[i][j]
+        self.case.ordre = 0
+        self.premiere = self.case
+        return self.case
+
+    def choixPremiereCase(self, x, y):
+        """Permet de choisir la première Case"""
+        case = self.echiquier.echiquier[x][y]
+        case.ordre = 0
+        self.case = case
+        self.premiere = case
+        return case
+
+
+    def deplacement(self, case):
+        self.pile.append(case)
+        case.ordre = len(self.pile)
+        if len(self.pile) == self.echiquier.long * self.echiquier.larg:
+            fini = True
+        else:
+            fini = False
+            possible = []
+            for voisin in case.lstVoisins:
+                if voisin not in self.pile:
+                    possible.append(voisin)
+            possible = triBulle(possible)
+
+
+            for voisin in possible:
+                fini = self.deplacement(voisin)
+                if fini:
+                    break
+
+            if not fini :
+                c = self.pile.pop()
+                c.ordre = 0
+
+        return fini
+    
+    def changeOrdre(self):
+        n = len(self.pile)
+        for i in range(n):
+            self.pile[i].ordre = i + 1
+
+    def fermer(self):
+        return self.premiere in self.pile[-1].lstVoisins
+
+
+def deroulement(longueur, largeur, x = None, y = None):
+    echiquier = Echiquier(longueur, largeur)
+    echiquier.creerEchiquier()
+    probleme = problemeCavalier(echiquier)
+
+    if(x == None or y == None):
+        case = probleme.genererPremiereCase()
+    else:
+        case = probleme.choixPremiereCase(x, y)
+
+    print("Première case :", case.coord)
+    probleme.deplacement(case)
+    probleme.changeOrdre()
+    if not echiquier.afficherEchiquier():
+        print("Cette configuration ne peut pas résoudre le problème")
+    else:
+        if probleme.fermer():
+            print("Cette solution est un cycle fermé")
+        else:
+            print("Cette solution est un cycle ouvert")
+    print("-----------------------------Fin-----------------------------")
+
+
+
+
+
+#-----Exécution du code-----#
+# deroulement(3,3)#--|
+# deroulement(4,4)#  |
+# deroulement(5,5)#  |===|Première case générer aléatoirement
+# deroulement(7,7)#  |
+# deroulement(8,8)#--|
+# deroulement(8,8,4,5)#===Première case choisie ->(4,5)
+
+for i in range(10):
+    for j in range(10):
+        deroulement(10,10,i,j)
